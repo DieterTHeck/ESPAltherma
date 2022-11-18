@@ -1,11 +1,13 @@
+.gitignore
 .pio
 .vscode/.browse.c_cpp.db*
 .vscode/c_cpp_properties.json
 .vscode/launch.json
+.vscode/settings.json
 .vscode/ipch
 src/setup.h
 private/
-.vscode/settings.json
 contrib/ldd_decoder/bin/
 contrib/ldd_decoder/obj/
 contrib/ldd_decoder/label_defines.*
+include/def/German/ROTEX(HPSU508).h
