@@ -10,4 +10,8 @@ private/
 contrib/ldd_decoder/bin/
 contrib/ldd_decoder/obj/
 contrib/ldd_decoder/label_defines.*
+<<<<<<< HEAD
 include/def/German/ROTEX(HPSU508).h
+=======
+src/my_setup.h
+>>>>>>> 657c5b3fde9bca03fafeded87ae29c23a60b7930
