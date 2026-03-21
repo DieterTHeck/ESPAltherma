@@ -1,4 +1,19 @@
 #include "main.hpp"
+#ifdef ARDUINO_M5Stick_C_Plus2
+#include <M5StickCPlus2.h>
+#elif ARDUINO_M5Stick_C_Plus
+#include <M5StickCPlus.h>
+#elif ARDUINO_M5Stick_C
+#include <M5StickC.h>
+#elif ARDUINO_M5Stack_Tough
+#include <M5Tough.h>
+#endif
+#if defined(ARDUINO_M5Stick_C_Plus2) || defined(ARDUINO_M5Stick_C_Plus) || \
+    defined(ARDUINO_M5Stick_C) || defined(ARDUINO_M5Stack_Tough)
+#include <M5Unified.h>
+#else
+#include <Arduino.h>
+#endif
 
 bool doRestartInStandaloneWifi = false;
 
@@ -32,6 +47,81 @@ void extraLoop()
   restart_board();
 }
 
+void checkWifi()
+{
+  int i = 0;
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(500);
+    Serial.print(".");
+    if (i++ == 120)
+    {
+      Serial.printf("Tried connecting for 60 sec, rebooting now.");
+      restart_board();
+    }
+  }
+}
+
+void setup_wifi()
+{
+  delay(10);
+  // We start by connecting to a WiFi network
+  mqttSerial.printf("Connecting to %s\n", WIFI_SSID);
+
+  #if defined(WIFI_IP) && defined(WIFI_GATEWAY) && defined(WIFI_SUBNET)
+    IPAddress local_IP(WIFI_IP);
+    IPAddress gateway(WIFI_GATEWAY);
+    IPAddress subnet(WIFI_SUBNET);
+
+    #ifdef WIFI_PRIMARY_DNS
+      IPAddress primaryDNS(WIFI_PRIMARY_DNS);
+    #else
+      IPAddress primaryDNS();
+    #endif
+
+    #ifdef WIFI_SECONDARY_DNS
+      IPAddress secondaryDNS(WIFI_SECONDARY_DNS);
+    #else
+      IPAddress secondaryDNS();
+    #endif
+
+    if (!WiFi.config(local_IP, gateway, subnet, primaryDNS, secondaryDNS)) {
+      mqttSerial.println("Failed to set static ip!");
+    }
+  #endif
+
+  WiFi.begin(WIFI_SSID, WIFI_PWD, 0, 0, true);
+  checkWifi();
+  mqttSerial.printf("Connected. IP Address: %s\n", WiFi.localIP().toString().c_str());
+}
+
+void initRegistries()
+{
+  // getting the list of registries to query from the selected values
+  for (size_t i = 0; i < sizeof(registryIDs); i++)
+  {
+    registryIDs[i] = 0xff;
+  }
+
+  int i = 0;
+  for (auto &&label : labelDefs)
+  {
+    if (!contains(registryIDs, sizeof(registryIDs), label.registryID))
+    {
+      mqttSerial.printf("Adding registry 0x%2x to be queried.\n", label.registryID);
+      registryIDs[i++] = label.registryID;
+    }
+  }
+  if (i == 0)
+  {
+    mqttSerial.printf("ERROR - No values selected in the include file. Stopping.\n");
+    while (true)
+    {
+      extraLoop();
+    }
+  }
+}
+
 void setupScreen()
 {
 #if defined(ARDUINO_M5Stick_C) || defined(ARDUINO_M5Stick_C_Plus)
@@ -41,9 +131,9 @@ void setupScreen()
   M5.Axp.ScreenBreath(12);
   M5.Lcd.fillScreen(TFT_WHITE);
   M5.Lcd.setFreeFont(&FreeSansBold12pt7b);
-  m5.Lcd.setTextDatum(MC_DATUM);
+  M5.Lcd.setTextDatum(MC_DATUM);
   int xpos = M5.Lcd.width() / 2; // half the screen width
-  int ypos = M5.Lcd.height() / 2; // half the screen width
+  int ypos = M5.Lcd.height() / 2; // half the screen height
   M5.Lcd.setTextColor(TFT_DARKGREY);
   M5.Lcd.drawString("ESPAltherma", xpos, ypos, 1);
   delay(2000);
