@@ -266,30 +266,31 @@ DriverMCP2515::DriverMCP2515()
 {
   self = this;
 
-  mcp2515 = new ArduinoMCP2515([this]()
-                              {
-                                SPI.beginTransaction(MCP2515x_SPI_SETTING);
-                                digitalWrite(config->CAN_SPI.PIN_CS, LOW);
-                              },
-                              [this]()
-                              {
-                                digitalWrite(config->CAN_SPI.PIN_CS, HIGH);
-                                SPI.endTransaction();
-                              },
-                              [this](uint8_t const dataByte) { return SPI.transfer(dataByte); },
-                              micros,
-                              [this](const uint32_t timestamp_us, const uint32_t id, const uint8_t *data, const uint8_t len)
-                              {
-                                CanFrame frame;
-                                frame.id = id;
-                                memcpy(frame.data, data, len);
-                                frame.len = len;
-                                frame.isEXT = id & MCP2515::CAN_EFF_BITMASK;
-                                frame.isRTR = id & MCP2515::CAN_RTR_BITMASK;
+  mcp2515 = new ArduinoMCP2515(
+  [this]() {
+    SPI.beginTransaction(MCP2515x_SPI_SETTING);
+    digitalWrite(config->CAN_SPI.PIN_CS, LOW);
+  },
+  [this]() {
+    digitalWrite(config->CAN_SPI.PIN_CS, HIGH);
+    SPI.endTransaction();
+  },
+  [this](uint8_t const dataByte) { return SPI.transfer(dataByte); },
+  []() -> unsigned long { return micros(); },            // MicroSecondFunc
+  []() -> unsigned long { return millis(); },            // MilliSecondFunc (fehlte)
+  [this](const uint32_t timestamp_us, const uint32_t id, const uint8_t *data, const uint8_t len)
+  {
+    CanFrame frame;
+    frame.id = id;
+    memcpy(frame.data, data, len);
+    frame.len = len;
+    frame.isEXT = id & MCP2515::CAN_EFF_BITMASK;
+    frame.isRTR = id & MCP2515::CAN_RTR_BITMASK;
 
-                                onDataRecieved(timestamp_us, frame);
-                              },
-                              nullptr);
+    onDataRecieved(timestamp_us, frame);
+  },
+  nullptr  // OnTransmitBufferEmptyFunc (optional)
+);
 }
 
 bool DriverMCP2515::initInterface()
