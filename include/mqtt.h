@@ -8,9 +8,6 @@
 #define EEPROM_CHK 1
 #define EEPROM_STATE 0
 
-#define MQTT_attr "espaltherma/ATTR"
-#define MQTT_lwt "espaltherma/LWT"
-
 #ifdef JSONTABLE
 char jsonbuff[MAX_MSG_SIZE] = "[{\0";
 #else
@@ -31,15 +28,65 @@ void sendValues()
 #endif
   snprintf(jsonbuff + strlen(jsonbuff),MAX_MSG_SIZE - strlen(jsonbuff) , "\"%s\":\"%ddBm\",", "WifiRSSI", WiFi.RSSI());
   snprintf(jsonbuff + strlen(jsonbuff),MAX_MSG_SIZE - strlen(jsonbuff) , "\"%s\":\"%d\",", "FreeMem", ESP.getFreeHeap());
-  jsonbuff[strlen(jsonbuff) - 1] = '}';
+  // close JSON (replace trailing comma with closing brace)
+  if (strlen(jsonbuff) > 1 && jsonbuff[strlen(jsonbuff) - 1] == ',') {
+    jsonbuff[strlen(jsonbuff) - 1] = '}';
+  } else {
+    // ensure valid JSON if nothing was added
+    strcat(jsonbuff, "}");
+  }
+
 #ifdef JSONTABLE
   strcat(jsonbuff,"]");
 #endif
+
+  // --- sanitize known problematic tokens before sending ---
+  // Replace unquoted minus for specific keys
+  // e.g. "Betrieb_Störung_x60":-  ->  "Betrieb_Störung_x60":"-"
+  // operate on a temporary String to use replace()
+  String out = String(jsonbuff);
+  out.replace("\"Betrieb_Störung_x60\":-", "\"Betrieb_Störung_x60\":\"-\"");
+  out.replace("\"Störcode_x60\":-", "\"Störcode_x60\":\"-\"");
+  out.replace("\"Störcode_x10\":-", "\"Störcode_x10\":\"-\"");
+  // Generic fallback: replace any '":-' occurrences with '":"-"' (safe because keys are quoted - extra care with negative numbers)
+ int p = 0;
+while ((p = out.indexOf("\":-", p)) != -1) {
+  int nextPos = p + 3;
+  if (nextPos >= out.length()) break;
+  char next = out.charAt(nextPos);
+  // if next is digit or '-' (negative number), skip
+  if (isdigit(next) || next == '-') {
+    p = nextPos;
+    continue;
+  }
+  // only replace when followed by comma or closing brace or whitespace
+  out = out.substring(0, p) + "\":\"-\"" + out.substring(nextPos);
+  p += 4;
+}
+  // copy back into jsonbuff (ensure size)
+  if (out.length() < MAX_MSG_SIZE) {
+    strncpy(jsonbuff, out.c_str(), MAX_MSG_SIZE);
+    jsonbuff[MAX_MSG_SIZE - 1] = '\0';
+  } else {
+    // fallback: do not send oversized payload
+    Serial.println("Sanitized payload too large, aborting publish.");
+    // restore empty template
+
+#ifdef JSONTABLE
+    strcpy(jsonbuff, "[{");
+#else
+    strcpy(jsonbuff, "{");
+#endif
+    return;
+  }
+  // --- end sanitize ---
+
+  // Publish sanitized payload
   client.publish(MQTT_attr, jsonbuff);
 #ifdef JSONTABLE
-  strcpy(jsonbuff, "[{\0");
+  strcpy(jsonbuff, "[{");
 #else
-  strcpy(jsonbuff, "{\0");
+  strcpy(jsonbuff, "{");
 #endif
 }
 
